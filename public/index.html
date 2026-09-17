@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Travel Disruption Risk Prototype</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel input-panel">
+        <div>
+          <p class="eyebrow">Operations travel desk</p>
+          <h1>Travel disruption risk checker</h1>
+          <p class="lede">
+            Enter a U.S. route and travel date. The prototype gathers real data, scores risk signals,
+            and shows evidence behind each recommendation.
+          </p>
+        </div>
+
+        <form id="trip-form" class="trip-form">
+          <label>
+            Origin
+            <input name="origin" required value="New York, NY" autocomplete="off" />
+          </label>
+          <label>
+            Destination
+            <input name="destination" required value="San Francisco, CA" autocomplete="off" />
+          </label>
+          <label>
+            Travel date
+            <input name="date" required type="date" />
+          </label>
+          <label>
+            Trip type
+            <select name="mode">
+              <option value="flight">Flight</option>
+              <option value="drive">Driving</option>
+              <option value="general">General business travel</option>
+            </select>
+          </label>
+          <button type="submit">Assess trip risk</button>
+        </form>
+      </section>
+
+      <section class="panel result-panel">
+        <div id="empty-state" class="empty-state">
+          <h2>Ready for a route</h2>
+          <p>Try New York to San Francisco for tomorrow, or enter a route you care about.</p>
+        </div>
+
+        <div id="loading" class="loading hidden">
+          <div class="spinner"></div>
+          <p>Gathering live evidence from external sources...</p>
+        </div>
+
+        <div id="results" class="hidden">
+          <div class="risk-header">
+            <div>
+              <p class="eyebrow">Assessment</p>
+              <h2 id="risk-title"></h2>
+              <p id="risk-summary"></p>
+            </div>
+            <div id="risk-badge" class="risk-badge"></div>
+          </div>
+
+          <div class="recommendation">
+            <h3>Recommended action</h3>
+            <p id="recommendation"></p>
+            <h3>Uncertainty</h3>
+            <p id="uncertainty"></p>
+          </div>
+
+          <div class="grid two">
+            <section>
+              <h3>Risk signals</h3>
+              <div id="signals" class="stack"></div>
+            </section>
+            <section>
+              <h3>Data sources</h3>
+              <div id="sources" class="stack"></div>
+            </section>
+          </div>
+
+          <section>
+            <h3>Evidence</h3>
+            <div id="evidence" class="evidence-list"></div>
+          </section>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
