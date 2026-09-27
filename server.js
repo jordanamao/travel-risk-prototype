@@ -55,6 +55,14 @@ async function handleAnalyze(url, res) {
     return;
   }
 
+  const dateValidation = validateTravelDate(date);
+  if (!dateValidation.valid) {
+    sendJson(res, 400, {
+      error: dateValidation.message
+    });
+    return;
+  }
+
   const originGeo = await geocode(origin);
   const destinationGeo = await geocode(destination);
   const midpoint = {
@@ -587,6 +595,60 @@ function firstNumber(values) {
 
 function displayValue(value, fallback = "?") {
   return value === null || value === undefined ? fallback : value;
+}
+
+function validateTravelDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { valid: false, message: "Travel date must use YYYY-MM-DD format." };
+  }
+
+  const requested = parseIsoDate(date);
+  if (!requested) {
+    return { valid: false, message: "Travel date is not valid." };
+  }
+
+  const today = startOfUtcDay(new Date());
+  const maxForecastDate = addUtcDays(today, 15);
+
+  if (requested < today) {
+    return { valid: false, message: "Travel date must be today or later." };
+  }
+
+  if (requested > maxForecastDate) {
+    return {
+      valid: false,
+      message: `Travel date is too far out for the live weather forecast. Choose a date through ${formatIsoDate(maxForecastDate)}.`
+    };
+  }
+
+  return { valid: true };
+}
+
+function parseIsoDate(date) {
+  const [year, month, day] = date.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+function startOfUtcDay(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function addUtcDays(date, days) {
+  const copy = new Date(date);
+  copy.setUTCDate(copy.getUTCDate() + days);
+  return copy;
+}
+
+function formatIsoDate(date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function severityFromWeather(precip, wind, gust) {

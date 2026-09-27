@@ -30,14 +30,18 @@
           <label>
             Travel date
             <input name="date" required type="date" />
+            <span id="date-help" class="field-note"></span>
           </label>
           <label>
             Trip type
             <select name="mode">
-              <option value="flight">Flight</option>
-              <option value="drive">Driving</option>
-              <option value="general">General business travel</option>
+              <option value="flight">Flight-focused trip</option>
+              <option value="drive">Driving-focused trip</option>
+              <option value="general">Business trip with mixed transportation</option>
             </select>
+            <span class="field-note">
+              Use mixed transportation when a work trip includes flight, driving, rideshare, train, or walking segments.
+            </span>
           </label>
           <button type="submit">Assess trip risk</button>
         </form>

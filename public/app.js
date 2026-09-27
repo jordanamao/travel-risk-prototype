@@ -7,7 +7,14 @@ const errorBox = document.querySelector("#error");
 
 const tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 1);
-dateInput.value = tomorrow.toISOString().slice(0, 10);
+const maxForecastDate = new Date();
+maxForecastDate.setDate(maxForecastDate.getDate() + 15);
+
+dateInput.min = formatDate(new Date());
+dateInput.max = formatDate(maxForecastDate);
+dateInput.value = formatDate(tomorrow);
+document.querySelector("#date-help").textContent =
+  `Live weather forecast dates are available through ${dateInput.max}.`;
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -24,7 +31,10 @@ form.addEventListener("submit", async (event) => {
     renderResults(data);
     setState("results");
   } catch (error) {
-    errorBox.textContent = error.message;
+    errorBox.textContent =
+      error.message === "Failed to fetch"
+        ? "Could not reach the local prototype server. Refresh http://localhost:5178 and try again."
+        : error.message;
     setState("error");
   }
 });
@@ -39,7 +49,7 @@ function setState(state) {
 function renderResults(data) {
   const level = data.score.level.toLowerCase();
   document.querySelector("#risk-title").textContent =
-    `${data.input.origin} to ${data.input.destination} on ${data.input.date}`;
+    `${data.input.origin} to ${data.input.destination} on ${data.input.date} · ${tripTypeLabel(data.input.mode)}`;
   document.querySelector("#risk-summary").textContent = data.summary;
   document.querySelector("#recommendation").textContent = data.recommendation;
   document.querySelector("#uncertainty").textContent =
@@ -134,4 +144,16 @@ function summarizeDetails(details) {
 
 function labelize(key) {
   return key.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+}
+
+function formatDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function tripTypeLabel(mode) {
+  return {
+    flight: "Flight-focused trip",
+    drive: "Driving-focused trip",
+    general: "Business trip with mixed transportation"
+  }[mode] || "Travel assessment";
 }
