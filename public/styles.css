@@ -910,6 +910,23 @@ button[type="submit"]:hover {
     font-size: 0.9rem;
 }
 
+.why-summary li span {
+    display: grid;
+    gap: 3px;
+}
+
+.why-summary li b {
+    font-size: 0.92rem;
+}
+
+.why-summary li em {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-style: normal;
+    font-weight: 650;
+    line-height: 1.4;
+}
+
 .why-summary li strong {
     flex: 0 0 auto;
     min-width: 42px;

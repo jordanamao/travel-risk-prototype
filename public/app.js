@@ -603,6 +603,8 @@ function renderGlance(data) {
       ["weather", "wind"].includes(signal.type)
   ).length;
   const sourceCount = new Set(data.evidence.map((item) => item.source)).size;
+  const unavailableEvidence = data.evidence.filter((item) => item.severity === "unknown");
+  const unavailableSourceCount = new Set(unavailableEvidence.map((item) => item.source)).size;
 
   const metrics = [
     {
@@ -622,6 +624,12 @@ function renderGlance(data) {
       val: `${data.evidence.length} items`,
       sub: `${sourceCount} external sources checked`,
       sev: "info"
+    },
+    {
+      label: "Source Health",
+      val: unavailableSourceCount ? `${unavailableSourceCount} partial` : "All available",
+      sub: sourceHealthSummary(sourceCount, unavailableEvidence),
+      sev: unavailableSourceCount ? "unknown" : "low"
     }
   ];
 
@@ -634,7 +642,7 @@ function renderGlance(data) {
       <span class="severity ${m.sev}">${m.sev}</span>
     </div>
   `).join('') + `
-    <p class="summary-mode-note">${data.ai.used ? "Summary generated with OpenAI API." : "Summary generated locally. OpenAI API is disabled."}</p>
+    <p class="summary-mode-note">${summaryModeText(data.ai)} ${unavailableSourceCount ? "Unavailable source details are preserved in the evidence section so the assessment remains auditable." : "All checked sources returned usable data for this assessment."}</p>
   `;
 }
 
@@ -648,13 +656,19 @@ function renderWhySummary(data) {
 
   if (!scoredSignals.length) {
     const item = document.createElement("li");
-    item.textContent = "No scored risk signals were detected.";
+    item.innerHTML = `
+      <span>No scored risk signals were detected. The available evidence stayed below the scoring thresholds.</span>
+      <strong>+0</strong>
+    `;
     list.appendChild(item);
   } else {
     for (const signal of scoredSignals) {
       const item = document.createElement("li");
       item.innerHTML = `
-        <span>${shortSignalLabel(signal)}${shortPointReason(signal)}</span>
+        <span>
+          <b>${shortSignalLabel(signal)}</b>
+          <em>${scoreReason(signal)}</em>
+        </span>
         <strong>+${signal.points || 0}</strong>
       `;
       list.appendChild(item);
@@ -663,8 +677,40 @@ function renderWhySummary(data) {
 
   const pointEquation = scoredSignals.map((signal) => signal.points || 0).join(" + ");
   math.textContent = scoredSignals.length
-      ? `${pointEquation} = ${data.score.points} points -> ${data.score.level} risk`
-      : `0 points; ${data.score.level} risk`;
+      ? `${pointEquation} = ${data.score.points} points. ${scoreBandText(data.score.points)} Result: ${data.score.level} risk.`
+      : `0 points. ${scoreBandText(0)} Result: ${data.score.level} risk.`;
+}
+
+function sourceHealthSummary(sourceCount, unavailableEvidence) {
+  if (!unavailableEvidence.length) {
+    return `${sourceCount} sources responded cleanly`;
+  }
+  const names = [...new Set(unavailableEvidence.map((item) => item.source))];
+  return `${names.slice(0, 2).join(", ")}${names.length > 2 ? ` +${names.length - 2}` : ""} had fallback evidence`;
+}
+
+function scoreReason(signal) {
+  const severityText = signal.severity === "high"
+      ? "High severity adds 6 points"
+      : signal.severity === "medium"
+      ? "Medium severity adds 3 points"
+      : signal.severity === "low"
+      ? "Low severity adds 1 point"
+      : "Informational evidence adds 0 points";
+  const flightBonus = signal.type === "aviation-weather" && (signal.points || 0) > severityBasePoints(signal.severity)
+      ? "; flight mode adds +1 airport-weather bonus"
+      : "";
+  return `${severityText}${flightBonus}. Evidence: ${signal.evidence || "source evidence"}.`;
+}
+
+function severityBasePoints(severity) {
+  return { high: 6, medium: 3, low: 1, info: 0, unknown: 0 }[severity] || 0;
+}
+
+function scoreBandText(points) {
+  if (points >= 10) return "10+ points is High.";
+  if (points >= 5) return "5-9 points is Medium.";
+  return "0-4 points is Low.";
 }
 
 function renderCards(selector, items) {
