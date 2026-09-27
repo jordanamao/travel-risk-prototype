@@ -1,101 +1,149 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Travel Disruption Risk Prototype</title>
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <main class="shell">
-      <section class="panel input-panel">
-        <div>
-          <p class="eyebrow">Operations travel desk</p>
-          <h1>Travel disruption risk checker</h1>
-          <p class="lede">
-            Enter a U.S. route and travel date. The prototype gathers real data, scores risk signals,
-            and shows evidence behind each recommendation.
-          </p>
-        </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Travel Disruption Risk Prototype</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main class="shell">
+  <section class="panel input-panel">
+    <!-- Subtle video overlay background -->
+    <video autoPlay loop muted playsInline class="panel-video-bg">
+      <source src="https://assets.mixkit.co/videos/preview/mixkit-flying-through-clouds-over-a-mountain-range-41538-large.mp4" type="video/mp4" />
+    </video>
 
-        <form id="trip-form" class="trip-form">
+    <div class="panel-content">
+      <div>
+        <p class="eyebrow">Operations travel desk</p>
+        <h1>Travel disruption risk checker</h1>
+        <p class="lede">
+          Enter a U.S. route and travel date. The prototype gathers real data, scores risk signals,
+          and shows evidence behind each recommendation.
+        </p>
+      </div>
+
+      <form id="trip-form" class="trip-form">
+        <div class="form-row">
           <label>
             Origin
-            <input name="origin" required value="New York, NY" autocomplete="off" />
+            <input name="origin" required value="New York, NY" autocomplete="off" placeholder="City or Airport" />
           </label>
           <label>
             Destination
-            <input name="destination" required value="San Francisco, CA" autocomplete="off" />
+            <input name="destination" required value="San Francisco, CA" autocomplete="off" placeholder="City or Airport" />
           </label>
-          <label>
-            Travel date
-            <input name="date" required type="date" />
-            <span id="date-help" class="field-note"></span>
-          </label>
-          <label>
-            Trip type
-            <select name="mode">
-              <option value="flight">Flight-focused trip</option>
-              <option value="drive">Driving-focused trip</option>
-              <option value="general">Business trip with mixed transportation</option>
-            </select>
-            <span class="field-note">
-              Use mixed transportation when a work trip includes flight, driving, rideshare, train, or walking segments.
-            </span>
-          </label>
-          <button type="submit">Assess trip risk</button>
-        </form>
+        </div>
+
+        <label>
+          Travel date
+          <input name="date" required type="date" />
+          <span id="date-help" class="field-note"></span>
+        </label>
+
+        <label>
+          Trip type
+          <select name="mode">
+            <option value="flight">Flight-focused trip</option>
+            <option value="drive">Driving-focused trip</option>
+            <option value="general">Business trip with mixed transportation</option>
+          </select>
+          <span class="field-note">
+                Use mixed transportation when a work trip includes flight, driving, rideshare, train, or walking segments.
+              </span>
+        </label>
+
+        <button type="submit">Assess trip risk</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel result-panel">
+    <div id="empty-state" class="empty-state">
+      <h2>Ready for a route</h2>
+      <p>Try New York to San Francisco for tomorrow, or enter a route you care about.</p>
+    </div>
+
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <p>Gathering live evidence from external sources...</p>
+    </div>
+
+    <div id="results" class="hidden">
+      <!-- Live Interactive Radar Video / Map Widget -->
+      <div class="radar-container">
+        <div class="radar-header">
+          <p class="eyebrow">Live Conditions</p>
+          <h3>National Weather Radar & Satellite Map</h3>
+        </div>
+        <iframe
+                id="radar-iframe"
+                class="radar-iframe"
+                src="https://embed.windy.com/embed2.html?lat=39.8283&lon=-98.5795&zoom=4&level=surface&overlay=radar&menu=&message=true&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1"
+                frameborder="0">
+        </iframe>
+      </div>
+
+      <section class="assessment-summary">
+        <div class="risk-header">
+          <div>
+            <p class="eyebrow">Assessment summary</p>
+            <h2 id="risk-title"></h2>
+            <p id="risk-summary"></p>
+          </div>
+          <div id="risk-badge" class="risk-badge"></div>
+        </div>
+
+        <div class="at-a-glance" aria-label="Assessment highlights">
+          <h3>At a glance</h3>
+          <p class="score-flow">Evidence is checked first. Risky evidence becomes risk signals. Risk signals add points, and total points become Low, Medium, or High risk.</p>
+          <div id="glance" class="glance-grid"></div>
+        </div>
+
+        <div class="why-summary">
+          <h3>Why this risk level?</h3>
+          <ul id="why-list"></ul>
+          <p id="score-math" class="score-math"></p>
+          <p class="point-rules">Rules: High = 6, Medium = 3, Low = 1. Flight-focused airport issues add +1.</p>
+        </div>
+
+        <div class="recommendation">
+          <h3>Recommended action</h3>
+          <p id="recommendation"></p>
+          <h3>Uncertainty</h3>
+          <p id="uncertainty"></p>
+        </div>
       </section>
 
-      <section class="panel result-panel">
-        <div id="empty-state" class="empty-state">
-          <h2>Ready for a route</h2>
-          <p>Try New York to San Francisco for tomorrow, or enter a route you care about.</p>
+      <section class="data-signals-section">
+        <h3>Data sources and detected risk signals</h3>
+        <p class="section-note">
+          The app checks external sources first, then turns risky findings into scored signals.
+        </p>
+        <div class="subsection">
+          <h4>Data sources</h4>
+          <p class="section-note">External sources checked for this assessment.</p>
+          <div id="sources" class="sources-grid"></div>
         </div>
-
-        <div id="loading" class="loading hidden">
-          <div class="spinner"></div>
-          <p>Gathering live evidence from external sources...</p>
+        <div class="subsection">
+          <h4>Detected risk signals</h4>
+          <p class="section-note">Only evidence that affects the score appears here.</p>
+          <div id="signals" class="stack"></div>
         </div>
-
-        <div id="results" class="hidden">
-          <div class="risk-header">
-            <div>
-              <p class="eyebrow">Assessment</p>
-              <h2 id="risk-title"></h2>
-              <p id="risk-summary"></p>
-            </div>
-            <div id="risk-badge" class="risk-badge"></div>
-          </div>
-
-          <div class="recommendation">
-            <h3>Recommended action</h3>
-            <p id="recommendation"></p>
-            <h3>Uncertainty</h3>
-            <p id="uncertainty"></p>
-          </div>
-
-          <div class="grid two">
-            <section>
-              <h3>Risk signals</h3>
-              <div id="signals" class="stack"></div>
-            </section>
-            <section>
-              <h3>Data sources</h3>
-              <div id="sources" class="stack"></div>
-            </section>
-          </div>
-
-          <section>
-            <h3>Evidence</h3>
-            <div id="evidence" class="evidence-list"></div>
-          </section>
-        </div>
-
-        <div id="error" class="error hidden"></div>
       </section>
-    </main>
 
-    <script src="/app.js"></script>
-  </body>
+      <section>
+        <h3>Evidence</h3>
+        <p class="section-note">All source data reviewed, including low-risk items that did not affect the score.</p>
+        <div id="evidence" class="evidence-list"></div>
+      </section>
+    </div>
+
+    <div id="error" class="error hidden"></div>
+  </section>
+</main>
+
+<script src="/app.js?v=score-explanations"></script>
+</body>
 </html>

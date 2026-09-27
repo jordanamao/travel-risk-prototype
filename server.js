@@ -202,8 +202,8 @@ async function getOpenMeteo(point, date, label) {
   evidence.push({
     source: "Open-Meteo Forecast API",
     label,
-    severity: severityFromWeather(precipProbability, windMax, gustMax),
-    headline: `${label}: ${displayValue(tempMin)}-${displayValue(tempMax)} C, ${displayValue(precipProbability, 0)}% precipitation risk, max wind ${displayValue(windMax)} km/h`,
+    severity: severityFromWeather(precipProbability, precipSum, windMax, gustMax),
+    headline: `${label}: ${displayValue(tempMin)}-${displayValue(tempMax)} C, ${displayValue(precipProbability, 0)}% precipitation risk, ${displayValue(precipSum)} mm precipitation, max wind ${displayValue(windMax)} km/h`,
     details: {
       location: point.label,
       date,
@@ -288,12 +288,14 @@ async function getNwsBundle(point, label) {
         },
         url: props.uri || String(alertsUrl)
       });
-      signals.push({
-        type: "official-alert",
-        severity,
-        message: `${label} has active NWS alert: ${props.event || props.headline}`,
-        evidence: props.headline || props.event
-      });
+      if (!isStaleNwsAlert(props)) {
+        signals.push({
+          type: "official-alert",
+          severity,
+          message: `${label} has active NWS alert: ${props.event || props.headline}`,
+          evidence: props.headline || props.event
+        });
+      }
     }
   } catch (error) {
     evidence.push({
@@ -365,7 +367,7 @@ async function getNearestMetars(point, label) {
         url: String(url)
       });
 
-      if (["IFR", "LIFR", "MVFR"].includes(metar.fltCat) || Number(metar.wspd) >= 25 || Number(metar.wgst) >= 35) {
+      if (["medium", "high"].includes(severity)) {
         signals.push({
           type: "aviation-weather",
           severity,
@@ -403,8 +405,10 @@ function scoreSignals(signals, mode) {
   const weights = { low: 1, info: 0, unknown: 0, medium: 3, high: 6 };
   let points = 0;
   for (const signal of signals) {
-    points += weights[signal.severity] || 0;
-    if (mode === "flight" && signal.type === "aviation-weather") points += 1;
+    const basePoints = weights[signal.severity] || 0;
+    const modeBonus = mode === "flight" && signal.type === "aviation-weather" ? 1 : 0;
+    signal.points = basePoints + modeBonus;
+    points += signal.points;
   }
 
   const level = points >= 10 ? "High" : points >= 5 ? "Medium" : "Low";
@@ -511,7 +515,8 @@ function serveStatic(pathname, res) {
     }
     const ext = path.extname(filePath);
     res.writeHead(200, {
-      "Content-Type": MIME_TYPES[ext] || "application/octet-stream"
+      "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
+      "Cache-Control": "no-store"
     });
     res.end(content);
   });
@@ -617,7 +622,7 @@ function validateTravelDate(date) {
   if (requested > maxForecastDate) {
     return {
       valid: false,
-      message: `Travel date is too far out for the live weather forecast. Choose a date through ${formatIsoDate(maxForecastDate)}.`
+      message: `Travel date is too far out for the live forecast window. This prototype can assess trips through ${formatIsoDate(maxForecastDate)} because the weather API only provides forecast data for about the next 15 days.`
     };
   }
 
@@ -651,9 +656,13 @@ function formatIsoDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function severityFromWeather(precip, wind, gust) {
-  if ((precip || 0) >= 80 || (wind || 0) >= 55 || (gust || 0) >= 75) return "high";
-  if ((precip || 0) >= 60 || (wind || 0) >= 40 || (gust || 0) >= 55) return "medium";
+function severityFromWeather(precip, precipAmount, wind, gust) {
+  if ((precip || 0) >= 80 || (precipAmount || 0) >= 25 || (wind || 0) >= 55 || (gust || 0) >= 75) {
+    return "high";
+  }
+  if ((precip || 0) >= 60 || (precipAmount || 0) >= 10 || (wind || 0) >= 40 || (gust || 0) >= 55) {
+    return "medium";
+  }
   return "low";
 }
 
@@ -661,6 +670,11 @@ function nwsSeverity(severity, urgency) {
   if (["Extreme", "Severe"].includes(severity) || urgency === "Immediate") return "high";
   if (["Moderate"].includes(severity) || urgency === "Expected") return "medium";
   return "low";
+}
+
+function isStaleNwsAlert(props) {
+  const text = `${props.headline || ""} ${props.description || ""} ${props.instruction || ""}`.toLowerCase();
+  return props.urgency === "Past" || text.includes("has been replaced") || text.includes("expired");
 }
 
 function severityFromFlightCategory(category, wind, gust, visibility) {
