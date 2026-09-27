@@ -28,11 +28,19 @@
         <div class="form-row">
           <label>
             Origin
-            <input name="origin" required value="New York, NY" autocomplete="off" placeholder="City or Airport" />
+            <span class="location-combobox">
+              <input name="origin" required value="New York, NY" autocomplete="off" data-location-input placeholder="City or Airport" />
+              <button type="button" class="location-toggle" aria-label="Show origin city options">&#9662;</button>
+              <span class="location-menu hidden"></span>
+            </span>
           </label>
           <label>
             Destination
-            <input name="destination" required value="San Francisco, CA" autocomplete="off" placeholder="City or Airport" />
+            <span class="location-combobox">
+              <input name="destination" required value="San Francisco, CA" autocomplete="off" data-location-input placeholder="City or Airport" />
+              <button type="button" class="location-toggle" aria-label="Show destination city options">&#9662;</button>
+              <span class="location-menu hidden"></span>
+            </span>
           </label>
         </div>
 
@@ -45,14 +53,29 @@
         <label>
           Trip type
           <select name="mode">
-            <option value="flight">Flight-focused trip</option>
-            <option value="drive">Driving-focused trip</option>
-            <option value="general">Business trip with mixed transportation</option>
+            <option value="flight">Flight: airport weather matters most</option>
+            <option value="drive">Driving: route weather matters most</option>
+            <option value="general">Business: mixed travel modes</option>
           </select>
           <span class="field-note">
-                Use mixed transportation when a work trip includes flight, driving, rideshare, train, or walking segments.
+                Business mode includes flight, driving, rideshare, train, and walking.
               </span>
         </label>
+
+        <div id="airport-preferences" class="airport-preferences">
+          <p class="control-heading">Flight airport preference</p>
+          <div class="form-row">
+            <label>
+              Origin airport
+              <select name="originAirport" data-airport-select="origin"></select>
+            </label>
+            <label>
+              Destination airport
+              <select name="destinationAirport" data-airport-select="destination"></select>
+            </label>
+          </div>
+          <span class="field-note">Leave Auto selected to use the nearest airport observations.</span>
+        </div>
 
         <button type="submit">Assess trip risk</button>
       </form>
@@ -88,16 +111,31 @@
       <section class="assessment-summary">
         <div class="risk-header">
           <div>
+            <div class="risk-status">
+              <div id="decision-badge" class="decision-badge"></div>
+              <div id="risk-badge" class="risk-badge"></div>
+            </div>
             <p class="eyebrow">Assessment summary</p>
-            <h2 id="risk-title"></h2>
+            <div class="risk-title-block">
+              <h2 id="risk-route"></h2>
+              <p id="risk-trip-type"></p>
+            </div>
             <p id="risk-summary"></p>
+            <div id="top-drivers" class="top-drivers"></div>
           </div>
-          <div id="risk-badge" class="risk-badge"></div>
+        </div>
+
+        <div class="operations-toolbar">
+          <p id="freshness-note"></p>
+          <div class="toolbar-actions">
+            <button type="button" id="copy-summary">Copy summary</button>
+            <button type="button" id="download-report">Download report</button>
+          </div>
         </div>
 
         <div class="at-a-glance" aria-label="Assessment highlights">
           <h3>At a glance</h3>
-          <p class="score-flow">Evidence is checked first. Risky evidence becomes risk signals. Risk signals add points, and total points become Low, Medium, or High risk.</p>
+          <p class="score-flow">The assessment reviews live weather, alerts, and airport observations, then converts the risky findings into scored signals that determine the final risk level.</p>
           <div id="glance" class="glance-grid"></div>
         </div>
 
@@ -109,34 +147,55 @@
         </div>
 
         <div class="recommendation">
-          <h3>Recommended action</h3>
-          <p id="recommendation"></p>
-          <h3>Uncertainty</h3>
-          <p id="uncertainty"></p>
+          <div class="recommendation-main">
+            <p class="recommendation-label">Recommended action</p>
+            <p id="recommendation"></p>
+          </div>
+          <div class="uncertainty-note">
+            <p class="recommendation-label">Limits to know</p>
+            <p id="uncertainty"></p>
+          </div>
         </div>
       </section>
 
+      <section class="scenario-section">
+        <div>
+          <h3>Compare safer dates</h3>
+          <p class="section-note">Check the selected date and the next two available forecast days for planning options.</p>
+        </div>
+        <button type="button" id="compare-dates">Compare dates</button>
+        <div id="scenario-results" class="scenario-results"></div>
+      </section>
+
       <section class="data-signals-section">
-        <h3>Data sources and detected risk signals</h3>
+        <h3>Data sources, risk signals, and evidence</h3>
         <p class="section-note">
-          The app checks external sources first, then turns risky findings into scored signals.
+          The app checks external sources, turns risky findings into scored signals, and keeps the supporting evidence available for review.
         </p>
-        <div class="subsection">
+        <div class="subsection sources-subsection">
           <h4>Data sources</h4>
           <p class="section-note">External sources checked for this assessment.</p>
           <div id="sources" class="sources-grid"></div>
         </div>
-        <div class="subsection">
+        <div class="subsection signals-subsection">
           <h4>Detected risk signals</h4>
           <p class="section-note">Only evidence that affects the score appears here.</p>
           <div id="signals" class="stack"></div>
         </div>
-      </section>
-
-      <section>
-        <h3>Evidence</h3>
-        <p class="section-note">All source data reviewed, including low-risk items that did not affect the score.</p>
-        <div id="evidence" class="evidence-list"></div>
+        <div class="subsection evidence-subsection">
+          <h4>Evidence</h4>
+          <p class="section-note">All source data reviewed, including low-risk items that did not affect the score.</p>
+          <div id="evidence" class="evidence-list"></div>
+        </div>
+        <div class="subsection glossary-subsection">
+          <h4>Glossary</h4>
+          <div class="glossary-grid">
+            <p><strong>METAR</strong><span>Stands for Meteorological Aerodrome Report. The app uses METAR in airport weather evidence and airport risk signals to read live visibility, clouds, wind, gusts, and VFR/MVFR/IFR status.</span></p>
+            <p><strong>NWS</strong><span>National Weather Service official U.S. weather alerts and forecasts.</span></p>
+            <p><strong>Precipitation probability</strong><span>Chance that measurable rain or snow occurs during the forecast period.</span></p>
+            <p><strong>Gust</strong><span>Wind is the steady speed. Gust is a short stronger burst. Gusts matter because sudden crosswinds can affect takeoff, landing, and high-profile vehicles.</span></p>
+          </div>
+        </div>
       </section>
     </div>
 
@@ -144,6 +203,6 @@
   </section>
 </main>
 
-<script src="/app.js?v=score-explanations"></script>
+<script src="/app.js?v=ops-polish"></script>
 </body>
 </html>

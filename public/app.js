@@ -4,6 +4,60 @@ const emptyState = document.querySelector("#empty-state");
 const loading = document.querySelector("#loading");
 const results = document.querySelector("#results");
 const errorBox = document.querySelector("#error");
+let latestAssessment = null;
+const locationOptions = [
+  "New York, NY",
+  "San Francisco, CA",
+  "Seattle, WA",
+  "Dallas, TX",
+  "Chicago, IL",
+  "Los Angeles, CA",
+  "Atlanta, GA",
+  "Boston, MA",
+  "Denver, CO",
+  "Miami, FL",
+  "Washington, DC",
+  "Houston, TX",
+  "Phoenix, AZ",
+  "Las Vegas, NV",
+  "Orlando, FL",
+  "Philadelphia, PA",
+  "Minneapolis, MN",
+  "Charlotte, NC",
+  "Portland, OR",
+  "Austin, TX"
+];
+const airportOptionsByCity = {
+  "New York, NY": [
+    ["KJFK", "JFK - John F. Kennedy"],
+    ["KLGA", "LGA - LaGuardia"],
+    ["KEWR", "EWR - Newark"],
+    ["KTEB", "TEB - Teterboro"]
+  ],
+  "San Francisco, CA": [
+    ["KSFO", "SFO - San Francisco"],
+    ["KOAK", "OAK - Oakland"],
+    ["KSJC", "SJC - San Jose"]
+  ],
+  "Seattle, WA": [["KSEA", "SEA - Seattle-Tacoma"], ["KBFI", "BFI - Boeing Field"]],
+  "Dallas, TX": [["KDFW", "DFW - Dallas/Fort Worth"], ["KDAL", "DAL - Dallas Love Field"]],
+  "Chicago, IL": [["KORD", "ORD - O'Hare"], ["KMDW", "MDW - Midway"]],
+  "Los Angeles, CA": [["KLAX", "LAX - Los Angeles"], ["KBUR", "BUR - Burbank"], ["KLGB", "LGB - Long Beach"]],
+  "Atlanta, GA": [["KATL", "ATL - Hartsfield-Jackson"]],
+  "Boston, MA": [["KBOS", "BOS - Logan"]],
+  "Denver, CO": [["KDEN", "DEN - Denver"]],
+  "Miami, FL": [["KMIA", "MIA - Miami"], ["KFLL", "FLL - Fort Lauderdale"]],
+  "Washington, DC": [["KDCA", "DCA - Reagan National"], ["KIAD", "IAD - Dulles"], ["KBWI", "BWI - Baltimore/Washington"]],
+  "Houston, TX": [["KIAH", "IAH - Bush Intercontinental"], ["KHOU", "HOU - Hobby"]],
+  "Phoenix, AZ": [["KPHX", "PHX - Sky Harbor"]],
+  "Las Vegas, NV": [["KLAS", "LAS - Harry Reid"]],
+  "Orlando, FL": [["KMCO", "MCO - Orlando"]],
+  "Philadelphia, PA": [["KPHL", "PHL - Philadelphia"]],
+  "Minneapolis, MN": [["KMSP", "MSP - Minneapolis-St. Paul"]],
+  "Charlotte, NC": [["KCLT", "CLT - Charlotte"]],
+  "Portland, OR": [["KPDX", "PDX - Portland"]],
+  "Austin, TX": [["KAUS", "AUS - Austin-Bergstrom"]]
+};
 
 // Helper function to format Date object into YYYY-MM-DD using local time
 function formatDate(date) {
@@ -32,6 +86,10 @@ if (dateHelp) {
   dateHelp.textContent = `Live forecast data is available for the next 15 days, so this prototype can assess trips through ${formatDate(maxForecastDate)}.`;
 }
 
+setupLocationComboboxes();
+setupAirportPreferences();
+setupResultActions();
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -44,6 +102,7 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) {
       throw new Error(data.error || "Unable to analyze trip");
     }
+    latestAssessment = data;
     renderResults(data);
     setState("results");
   } catch (error) {
@@ -55,6 +114,159 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+function setupLocationComboboxes() {
+  const inputs = document.querySelectorAll("[data-location-input]");
+
+  for (const input of inputs) {
+    const wrapper = input.closest(".location-combobox");
+    const menu = wrapper.querySelector(".location-menu");
+    const toggle = wrapper.querySelector(".location-toggle");
+    let activeIndex = -1;
+
+    const closeMenu = () => {
+      menu.classList.add("hidden");
+      activeIndex = -1;
+    };
+
+    const openMenu = (showAll = false) => {
+      const query = input.value.trim().toLowerCase();
+      const matches = showAll || !query
+          ? locationOptions
+          : locationOptions.filter((location) => location.toLowerCase().includes(query));
+
+      menu.innerHTML = "";
+      const optionsToShow = matches.length ? matches : locationOptions;
+      optionsToShow.forEach((location, index) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "location-option";
+        option.textContent = location;
+        option.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          input.value = location;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          closeMenu();
+        });
+        if (index === activeIndex) option.classList.add("active");
+        menu.appendChild(option);
+      });
+
+      menu.classList.remove("hidden");
+    };
+
+    input.addEventListener("focus", () => openMenu(true));
+    input.addEventListener("input", () => openMenu(false));
+    toggle.addEventListener("click", () => {
+      input.focus();
+      openMenu(true);
+    });
+
+    input.addEventListener("keydown", (event) => {
+      const optionCount = menu.querySelectorAll(".location-option").length;
+      if (event.key === "Escape") {
+        closeMenu();
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        activeIndex = optionCount ? (activeIndex + 1) % optionCount : -1;
+        openMenu(false);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        activeIndex = optionCount ? (activeIndex - 1 + optionCount) % optionCount : -1;
+        openMenu(false);
+      } else if (event.key === "Enter" && activeIndex >= 0) {
+        event.preventDefault();
+        const option = menu.querySelectorAll(".location-option")[activeIndex];
+        if (option) input.value = option.textContent;
+        closeMenu();
+      }
+    });
+
+    document.addEventListener("mousedown", (event) => {
+      if (!wrapper.contains(event.target)) closeMenu();
+    });
+  }
+}
+
+function setupAirportPreferences() {
+  const modeSelect = form.querySelector('select[name="mode"]');
+  const originInput = form.querySelector('input[name="origin"]');
+  const destinationInput = form.querySelector('input[name="destination"]');
+  const airportPanel = document.querySelector("#airport-preferences");
+
+  const syncVisibility = () => {
+    const shouldShow = modeSelect.value !== "drive";
+    airportPanel.classList.toggle("hidden", !shouldShow);
+  };
+
+  const syncAirports = () => {
+    populateAirportSelect("origin", originInput.value);
+    populateAirportSelect("destination", destinationInput.value);
+  };
+
+  modeSelect.addEventListener("change", syncVisibility);
+  originInput.addEventListener("input", syncAirports);
+  destinationInput.addEventListener("input", syncAirports);
+  originInput.addEventListener("change", syncAirports);
+  destinationInput.addEventListener("change", syncAirports);
+  syncVisibility();
+  syncAirports();
+}
+
+function populateAirportSelect(kind, locationValue) {
+  const select = document.querySelector(`[data-airport-select="${kind}"]`);
+  const options = airportOptionsByCity[locationValue] || [];
+  select.innerHTML = "";
+
+  const auto = document.createElement("option");
+  auto.value = "";
+  auto.textContent = "Auto: nearest airports";
+  select.appendChild(auto);
+
+  for (const [value, label] of options) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+}
+
+function setupResultActions() {
+  document.querySelector("#copy-summary").addEventListener("click", async () => {
+    if (!latestAssessment) return;
+    const text = buildReportText(latestAssessment);
+    try {
+      await navigator.clipboard.writeText(text);
+      flashButton("#copy-summary", "Copied");
+    } catch {
+      flashButton("#copy-summary", "Copy failed");
+    }
+  });
+
+  document.querySelector("#download-report").addEventListener("click", () => {
+    if (!latestAssessment) return;
+    const blob = new Blob([buildReportText(latestAssessment)], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `travel-risk-${latestAssessment.input.date}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  document.querySelector("#compare-dates").addEventListener("click", compareDates);
+}
+
+function flashButton(selector, label) {
+  const button = document.querySelector(selector);
+  const original = button.textContent;
+  button.textContent = label;
+  setTimeout(() => {
+    button.textContent = original;
+  }, 1400);
+}
+
 function setState(state) {
   emptyState.classList.toggle("hidden", state !== "empty");
   loading.classList.toggle("hidden", state !== "loading");
@@ -64,8 +276,10 @@ function setState(state) {
 
 function renderResults(data) {
   const level = data.score.level.toLowerCase();
-  document.querySelector("#risk-title").textContent =
-      `${data.input.origin} to ${data.input.destination} on ${data.input.date} · ${tripTypeLabel(data.input.mode)}`;
+  document.querySelector("#risk-route").textContent =
+      `${data.input.origin} to ${data.input.destination}`;
+  document.querySelector("#risk-trip-type").textContent =
+      `${data.input.date} · ${tripTypeLabel(data.input.mode)}`;
   document.querySelector("#risk-summary").textContent = data.summary;
   document.querySelector("#recommendation").textContent = data.recommendation;
   document.querySelector("#uncertainty").textContent =
@@ -78,21 +292,148 @@ function renderResults(data) {
   badge.className = `risk-badge ${level}`;
   badge.textContent = data.score.level;
 
+  const decision = decisionForLevel(data.score.level);
+  const decisionBadge = document.querySelector("#decision-badge");
+  decisionBadge.className = `decision-badge ${level}`;
+  decisionBadge.textContent = decision;
+
+  renderTopDrivers(data.signals);
+  renderFreshness(data);
   updateRadarMap(data.input.destination);
   renderGlance(data);
   renderWhySummary(data);
   renderSignals(data.signals);
 
-  renderCards(
-      "#sources",
-      data.sources.map((source) => ({
-        meta: source.name,
-        title: source.purpose,
-        body: source.url
-      }))
-  );
+  renderSources(data.sources);
 
   renderEvidence(data.evidence);
+}
+
+function decisionForLevel(level) {
+  if (level === "High") return "Delay / reroute";
+  if (level === "Medium") return "Monitor closely";
+  return "Proceed";
+}
+
+function renderTopDrivers(signals) {
+  const container = document.querySelector("#top-drivers");
+  const topSignals = [...signals]
+      .filter((signal) => (signal.points || 0) > 0)
+      .sort((a, b) => (b.points || 0) - (a.points || 0))
+      .slice(0, 3);
+
+  container.innerHTML = "";
+  if (!topSignals.length) {
+    container.textContent = "No major risk drivers were detected.";
+    return;
+  }
+
+  const label = document.createElement("span");
+  label.textContent = "Main drivers";
+  container.appendChild(label);
+
+  for (const signal of topSignals) {
+    const pill = document.createElement("strong");
+    pill.textContent = shortSignalLabel(signal);
+    container.appendChild(pill);
+  }
+}
+
+function renderFreshness(data) {
+  const sourceCount = new Set(data.evidence.map((item) => item.source)).size;
+  const checkedAt = new Date().toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+  document.querySelector("#freshness-note").textContent =
+      `Last checked ${checkedAt}. ${sourceCount} external sources reviewed.`;
+}
+
+async function compareDates() {
+  const container = document.querySelector("#scenario-results");
+  const button = document.querySelector("#compare-dates");
+  const formData = new FormData(form);
+  const baseDate = new Date(`${formData.get("date")}T00:00:00`);
+  const dates = [0, 1, 2]
+      .map((offset) => {
+        const date = new Date(baseDate);
+        date.setDate(baseDate.getDate() + offset);
+        return formatDate(date);
+      })
+      .filter((date) => date <= dateInput.max);
+
+  button.disabled = true;
+  button.textContent = "Comparing...";
+  container.innerHTML = `<p class="section-note">Checking nearby forecast dates...</p>`;
+
+  try {
+    const results = await Promise.all(dates.map(async (date) => {
+      const params = new URLSearchParams(formData);
+      params.set("date", date);
+      const response = await fetch(`/api/analyze?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to compare dates");
+      return data;
+    }));
+    renderScenarioResults(results);
+  } catch (error) {
+    container.innerHTML = `<p class="error-inline">${error.message}</p>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Compare dates";
+  }
+}
+
+function renderScenarioResults(results) {
+  const container = document.querySelector("#scenario-results");
+  container.innerHTML = "";
+
+  for (const item of results) {
+    const row = document.createElement("article");
+    const level = item.score.level.toLowerCase();
+    row.className = `scenario-row ${level}`;
+    row.innerHTML = `
+      <div>
+        <strong></strong>
+        <span></span>
+      </div>
+      <p></p>
+    `;
+    row.querySelector("strong").textContent = item.input.date;
+    row.querySelector("span").textContent =
+        `${decisionForLevel(item.score.level)} · ${item.score.points} pts · ${item.score.level}`;
+    row.querySelector("p").textContent = item.signals.length
+        ? item.signals.slice(0, 2).map(shortSignalLabel).join(", ")
+        : "No major scored signals";
+    container.appendChild(row);
+  }
+}
+
+function buildReportText(data) {
+  const drivers = [...data.signals]
+      .filter((signal) => (signal.points || 0) > 0)
+      .sort((a, b) => (b.points || 0) - (a.points || 0))
+      .map((signal) => `- ${shortSignalLabel(signal)}: +${signal.points || 0}`)
+      .join("\n");
+
+  return [
+    `Travel disruption risk assessment`,
+    `${data.input.origin} to ${data.input.destination}`,
+    `Date: ${data.input.date}`,
+    `Decision: ${decisionForLevel(data.score.level)}`,
+    `Risk: ${data.score.level} (${data.score.points} points)`,
+    ``,
+    `Recommended action:`,
+    data.recommendation,
+    ``,
+    `Main drivers:`,
+    drivers || "- No major scored drivers",
+    ``,
+    `Limits:`,
+    `${data.uncertainty} ${summaryModeText(data.ai)}`
+  ].join("\n");
 }
 
 function updateRadarMap(destination) {
@@ -115,6 +456,28 @@ function updateRadarMap(destination) {
   }
 
   iframe.src = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&zoom=${zoom}&level=surface&overlay=radar&menu=&message=true&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1`;
+}
+
+function renderSources(sources) {
+  const container = document.querySelector("#sources");
+  container.innerHTML = "";
+  for (const source of sources) {
+    const item = document.createElement("article");
+    item.className = "source-row";
+    item.innerHTML = `
+      <div>
+        <p class="source-name"></p>
+        <p class="source-purpose"></p>
+      </div>
+      <a target="_blank" rel="noreferrer"></a>
+    `;
+    item.querySelector(".source-name").textContent = source.name;
+    item.querySelector(".source-purpose").textContent = source.purpose;
+    const link = item.querySelector("a");
+    link.href = source.url;
+    link.textContent = "Open source";
+    container.appendChild(item);
+  }
 }
 
 function renderGlance(data) {
@@ -143,12 +506,6 @@ function renderGlance(data) {
       val: `${data.evidence.length} items`,
       sub: `${sourceCount} external sources checked`,
       sev: "info"
-    },
-    {
-      label: "Summary Mode",
-      val: data.ai.used ? "OpenAI API" : "Local Engine",
-      sub: data.ai.used ? "OpenAI synthesis used" : "OpenAI disabled",
-      sev: "info"
     }
   ];
 
@@ -160,7 +517,9 @@ function renderGlance(data) {
       <span class="body">${m.sub}</span>
       <span class="severity ${m.sev}">${m.sev}</span>
     </div>
-  `).join('');
+  `).join('') + `
+    <p class="summary-mode-note">${data.ai.used ? "Summary generated with OpenAI API." : "Summary generated locally. OpenAI API is disabled."}</p>
+  `;
 }
 
 function renderWhySummary(data) {
@@ -178,14 +537,17 @@ function renderWhySummary(data) {
   } else {
     for (const signal of scoredSignals) {
       const item = document.createElement("li");
-      item.textContent = `${shortSignalLabel(signal)}: +${signal.points || 0}${shortPointReason(signal)}`;
+      item.innerHTML = `
+        <span>${shortSignalLabel(signal)}${shortPointReason(signal)}</span>
+        <strong>+${signal.points || 0}</strong>
+      `;
       list.appendChild(item);
     }
   }
 
-  const pointParts = data.signals.map((signal) => `${signal.points || 0} ${shortSignalLabel(signal)}`);
-  math.textContent = pointParts.length
-      ? `${pointParts.join(" + ")} = ${data.score.points} points; ${data.score.level} risk`
+  const pointEquation = scoredSignals.map((signal) => signal.points || 0).join(" + ");
+  math.textContent = scoredSignals.length
+      ? `${pointEquation} = ${data.score.points} points -> ${data.score.level} risk`
       : `0 points; ${data.score.level} risk`;
 }
 
@@ -439,7 +801,7 @@ function aviationCategoryExplanation(category) {
 }
 
 function aviationCategoryGuide() {
-  return "Nearest airport observations. VFR = good visual conditions. MVFR = marginal visibility or clouds. IFR = poor visibility or low clouds. LIFR = very poor visibility or very low clouds.";
+  return "Nearest airport observations. VFR is good; MVFR, IFR, and LIFR mean increasingly poor visibility or cloud conditions.";
 }
 
 function summarizeDetails(details) {
@@ -471,9 +833,9 @@ function labelize(key) {
 
 function tripTypeLabel(mode) {
   return {
-    flight: "Flight-focused trip",
-    drive: "Driving-focused trip",
-    general: "Business trip with mixed transportation"
+    flight: "Flight: airport weather matters most",
+    drive: "Driving: route weather matters most",
+    general: "Business: mixed travel modes"
   }[mode] || "Travel assessment";
 }
 

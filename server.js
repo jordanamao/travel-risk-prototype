@@ -9,6 +9,28 @@ loadEnv();
 const PORT = Number(process.env.PORT || 5177);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const USER_AGENT = "travel-risk-prototype/1.0 (candidate assessment prototype)";
+const KNOWN_LOCATIONS = {
+  "new york, ny": { label: "New York, NY, United States", lat: 40.7128, lon: -74.0060 },
+  "san francisco, ca": { label: "San Francisco, CA, United States", lat: 37.7749, lon: -122.4194 },
+  "seattle, wa": { label: "Seattle, WA, United States", lat: 47.6062, lon: -122.3321 },
+  "dallas, tx": { label: "Dallas, TX, United States", lat: 32.7767, lon: -96.7970 },
+  "chicago, il": { label: "Chicago, IL, United States", lat: 41.8781, lon: -87.6298 },
+  "los angeles, ca": { label: "Los Angeles, CA, United States", lat: 34.0522, lon: -118.2437 },
+  "atlanta, ga": { label: "Atlanta, GA, United States", lat: 33.7490, lon: -84.3880 },
+  "boston, ma": { label: "Boston, MA, United States", lat: 42.3601, lon: -71.0589 },
+  "denver, co": { label: "Denver, CO, United States", lat: 39.7392, lon: -104.9903 },
+  "miami, fl": { label: "Miami, FL, United States", lat: 25.7617, lon: -80.1918 },
+  "washington, dc": { label: "Washington, DC, United States", lat: 38.9072, lon: -77.0369 },
+  "houston, tx": { label: "Houston, TX, United States", lat: 29.7604, lon: -95.3698 },
+  "phoenix, az": { label: "Phoenix, AZ, United States", lat: 33.4484, lon: -112.0740 },
+  "las vegas, nv": { label: "Las Vegas, NV, United States", lat: 36.1699, lon: -115.1398 },
+  "orlando, fl": { label: "Orlando, FL, United States", lat: 28.5383, lon: -81.3792 },
+  "philadelphia, pa": { label: "Philadelphia, PA, United States", lat: 39.9526, lon: -75.1652 },
+  "minneapolis, mn": { label: "Minneapolis, MN, United States", lat: 44.9778, lon: -93.2650 },
+  "charlotte, nc": { label: "Charlotte, NC, United States", lat: 35.2271, lon: -80.8431 },
+  "portland, or": { label: "Portland, OR, United States", lat: 45.5152, lon: -122.6784 },
+  "austin, tx": { label: "Austin, TX, United States", lat: 30.2672, lon: -97.7431 }
+};
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -31,8 +53,11 @@ const server = http.createServer(async (req, res) => {
     serveStatic(url.pathname, res);
   } catch (error) {
     console.error(error);
+    const message = error.message.includes("429")
+      ? "External geocoding service is rate-limiting requests. Try a listed city or wait a moment before retrying."
+      : "Unexpected server error";
     sendJson(res, 500, {
-      error: "Unexpected server error",
+      error: message,
       details: error.message
     });
   }
@@ -47,6 +72,8 @@ async function handleAnalyze(url, res) {
   const destination = clean(url.searchParams.get("destination"));
   const date = clean(url.searchParams.get("date"));
   const mode = clean(url.searchParams.get("mode")) || "flight";
+  const originAirport = cleanAirport(url.searchParams.get("originAirport"));
+  const destinationAirport = cleanAirport(url.searchParams.get("destinationAirport"));
 
   if (!origin || !destination || !date) {
     sendJson(res, 400, {
@@ -78,7 +105,7 @@ async function handleAnalyze(url, res) {
       getOpenMeteo(midpoint, date, "Route midpoint forecast"),
       getNwsBundle(originGeo, "Origin NWS"),
       getNwsBundle(destinationGeo, "Destination NWS"),
-      getAviationBundle(originGeo, destinationGeo)
+      getAviationBundle(originGeo, destinationGeo, { originAirport, destinationAirport })
     ]);
 
   const evidence = [
@@ -111,7 +138,7 @@ async function handleAnalyze(url, res) {
   });
 
   sendJson(res, 200, {
-    input: { origin, destination, date, mode },
+    input: { origin, destination, date, mode, originAirport, destinationAirport },
     route: {
       origin: originGeo,
       destination: destinationGeo,
@@ -150,6 +177,14 @@ async function handleAnalyze(url, res) {
 }
 
 async function geocode(query) {
+  const known = KNOWN_LOCATIONS[query.toLowerCase()];
+  if (known) {
+    return {
+      ...known,
+      source: "Built-in city coordinates"
+    };
+  }
+
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", query);
   url.searchParams.set("format", "jsonv2");
@@ -311,16 +346,16 @@ async function getNwsBundle(point, label) {
   return { evidence, signals };
 }
 
-async function getAviationBundle(origin, destination) {
-  const originData = await getNearestMetars(origin, "Origin airport weather");
-  const destData = await getNearestMetars(destination, "Destination airport weather");
+async function getAviationBundle(origin, destination, preferences = {}) {
+  const originData = await getNearestMetars(origin, "Origin airport weather", preferences.originAirport);
+  const destData = await getNearestMetars(destination, "Destination airport weather", preferences.destinationAirport);
   return {
     evidence: [...originData.evidence, ...destData.evidence],
     signals: [...originData.signals, ...destData.signals]
   };
 }
 
-async function getNearestMetars(point, label) {
+async function getNearestMetars(point, label, preferredIcao) {
   const evidence = [];
   const signals = [];
   const latDelta = 1.5;
@@ -338,7 +373,7 @@ async function getNearestMetars(point, label) {
   try {
     const data = await fetchJson(url);
     const rows = Array.isArray(data) ? data : [];
-    const nearest = rows
+    let nearest = rows
       .filter((row) => Number.isFinite(Number(row.lat)) && Number.isFinite(Number(row.lon)))
       .map((row) => ({
         ...row,
@@ -346,6 +381,20 @@ async function getNearestMetars(point, label) {
       }))
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, 3);
+
+    if (preferredIcao) {
+      const preferred = rows
+        .filter((row) =>
+          String(row.icaoId || "").toUpperCase() === preferredIcao &&
+          Number.isFinite(Number(row.lat)) &&
+          Number.isFinite(Number(row.lon))
+        )
+        .map((row) => ({
+          ...row,
+          distanceKm: haversineKm(point.lat, point.lon, Number(row.lat), Number(row.lon))
+        }));
+      if (preferred.length) nearest = preferred.slice(0, 1);
+    }
 
     for (const metar of nearest) {
       const severity = severityFromFlightCategory(metar.fltCat, metar.wspd, metar.wgst, metar.visib);
@@ -479,10 +528,7 @@ async function synthesizeWithAi(context) {
 function localSynthesis(context) {
   const topSignals = [...context.signals].sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
   const top = topSignals.slice(0, 3);
-  const riskText =
-    top.length > 0
-      ? top.map((signal) => signal.message).join(" ")
-      : "No major risk signals were found in the current data sources.";
+  const driverText = readableDriverText(top);
 
   const recommendation =
     context.score.level === "High"
@@ -492,11 +538,33 @@ function localSynthesis(context) {
       : "Trip risk appears manageable based on currently available evidence; still recheck conditions before leaving.";
 
   return {
-    summary: `${context.score.level} disruption risk. ${riskText}`,
+    summary: top.length
+      ? `${context.score.level} disruption risk, driven by ${driverText}.`
+      : `${context.score.level} disruption risk. No major risk signals were found in the current data sources.`,
     recommendation,
     uncertainty:
       "This prototype combines live weather and aviation signals. It does not include airline-specific operations, booked flight status, road closures, or private corporate policies."
   };
+}
+
+function readableDriverText(signals) {
+  const labels = signals.map((signal) => {
+    if (signal.type === "weather") return "heavy precipitation forecast at the origin";
+    if (signal.type === "wind") return "potentially disruptive wind";
+    if (signal.type === "aviation-weather") {
+      const station = signal.message.match(/near\s+([A-Z0-9]+)/);
+      return station ? `${station[1]} airport weather conditions` : "airport weather conditions";
+    }
+    if (signal.type === "official-alert") {
+      const event = signal.message.match(/alert:\s*(.+)$/);
+      return event ? `an active ${event[1]}` : "an active official weather alert";
+    }
+    return signal.message.toLowerCase();
+  });
+
+  if (labels.length <= 1) return labels[0] || "current weather conditions";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
 }
 
 function serveStatic(pathname, res) {
@@ -590,6 +658,11 @@ function sendJson(res, status, payload) {
 
 function clean(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanAirport(value) {
+  const cleaned = clean(value).toUpperCase();
+  return /^[A-Z0-9]{3,4}$/.test(cleaned) ? cleaned : "";
 }
 
 function firstNumber(values) {
