@@ -137,6 +137,8 @@
           <h3>At a glance</h3>
           <p class="score-flow">The assessment reviews live weather, alerts, and airport observations, then converts the risky findings into scored signals that determine the final risk level.</p>
           <div id="glance" class="glance-grid"></div>
+          <div id="impact-split" class="impact-split"></div>
+          <div id="score-breakdown" class="score-breakdown"></div>
         </div>
 
         <div class="why-summary">
@@ -150,10 +152,23 @@
           <div class="recommendation-main">
             <p class="recommendation-label">Recommended action</p>
             <p id="recommendation"></p>
+            <div class="next-steps">
+              <p class="recommendation-label">Operator next steps</p>
+              <ul id="next-steps"></ul>
+            </div>
           </div>
           <div class="uncertainty-note">
             <p class="recommendation-label">Limits to know</p>
             <p id="uncertainty"></p>
+            <div class="not-included">
+              <span>Not included</span>
+              <ul>
+                <li>Airline-specific delays</li>
+                <li>Booked itinerary status</li>
+                <li>Road closures</li>
+                <li>Private company policy</li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>

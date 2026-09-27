@@ -100,12 +100,42 @@ async function handleAnalyze(url, res) {
 
   const [originWeather, destinationWeather, midpointWeather, originNws, destinationNws, aviation] =
     await Promise.all([
-      getOpenMeteo(originGeo, date, "Origin forecast"),
-      getOpenMeteo(destinationGeo, date, "Destination forecast"),
-      getOpenMeteo(midpoint, date, "Route midpoint forecast"),
-      getNwsBundle(originGeo, "Origin NWS"),
-      getNwsBundle(destinationGeo, "Destination NWS"),
-      getAviationBundle(originGeo, destinationGeo, { originAirport, destinationAirport })
+      safeBundle(
+        () => getOpenMeteo(originGeo, date, "Origin forecast"),
+        "Open-Meteo Forecast API",
+        "Origin forecast",
+        originGeo.label
+      ),
+      safeBundle(
+        () => getOpenMeteo(destinationGeo, date, "Destination forecast"),
+        "Open-Meteo Forecast API",
+        "Destination forecast",
+        destinationGeo.label
+      ),
+      safeBundle(
+        () => getOpenMeteo(midpoint, date, "Route midpoint forecast"),
+        "Open-Meteo Forecast API",
+        "Route midpoint forecast",
+        midpoint.label
+      ),
+      safeBundle(
+        () => getNwsBundle(originGeo, "Origin NWS"),
+        "National Weather Service API",
+        "Origin NWS",
+        originGeo.label
+      ),
+      safeBundle(
+        () => getNwsBundle(destinationGeo, "Destination NWS"),
+        "National Weather Service API",
+        "Destination NWS",
+        destinationGeo.label
+      ),
+      safeBundle(
+        () => getAviationBundle(originGeo, destinationGeo, { originAirport, destinationAirport }),
+        "Aviation Weather Center API",
+        "Airport weather",
+        `${originGeo.label} and ${destinationGeo.label}`
+      )
     ]);
 
   const evidence = [
@@ -204,6 +234,29 @@ async function geocode(query) {
     lon: Number(item.lon),
     source: "OpenStreetMap Nominatim"
   };
+}
+
+async function safeBundle(loader, source, label, location) {
+  try {
+    return await loader();
+  } catch (error) {
+    return {
+      evidence: [
+        {
+          source,
+          label,
+          severity: "unknown",
+          headline: `${label} data unavailable`,
+          details: {
+            location,
+            reason: error.message
+          },
+          url: ""
+        }
+      ],
+      signals: []
+    };
+  }
 }
 
 async function getOpenMeteo(point, date, label) {

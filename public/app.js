@@ -105,6 +105,7 @@ form.addEventListener("submit", async (event) => {
     latestAssessment = data;
     renderResults(data);
     setState("results");
+    compareDates({ automatic: true });
   } catch (error) {
     errorBox.textContent =
         error.message === "Failed to fetch"
@@ -301,6 +302,9 @@ function renderResults(data) {
   renderFreshness(data);
   updateRadarMap(data.input.destination);
   renderGlance(data);
+  renderImpactSplit(data);
+  renderScoreBreakdown(data.signals);
+  renderNextSteps(data);
   renderWhySummary(data);
   renderSignals(data.signals);
 
@@ -352,6 +356,10 @@ function renderFreshness(data) {
 }
 
 async function compareDates() {
+  return runDateComparison({ automatic: false });
+}
+
+async function runDateComparison({ automatic }) {
   const container = document.querySelector("#scenario-results");
   const button = document.querySelector("#compare-dates");
   const formData = new FormData(form);
@@ -365,7 +373,7 @@ async function compareDates() {
       .filter((date) => date <= dateInput.max);
 
   button.disabled = true;
-  button.textContent = "Comparing...";
+  button.textContent = automatic ? "Updating..." : "Comparing...";
   container.innerHTML = `<p class="section-note">Checking nearby forecast dates...</p>`;
 
   try {
@@ -434,6 +442,114 @@ function buildReportText(data) {
     `Limits:`,
     `${data.uncertainty} ${summaryModeText(data.ai)}`
   ].join("\n");
+}
+
+function renderImpactSplit(data) {
+  const container = document.querySelector("#impact-split");
+  const segments = [
+    {
+      label: "Origin",
+      level: segmentLevel(data, "Origin"),
+      detail: "Departure area"
+    },
+    {
+      label: "Destination",
+      level: segmentLevel(data, "Destination"),
+      detail: "Arrival area"
+    },
+    {
+      label: "Route midpoint",
+      level: segmentLevel(data, "Route midpoint"),
+      detail: "En-route weather"
+    }
+  ];
+
+  container.innerHTML = segments.map((segment) => `
+    <article class="impact-card ${segment.level.toLowerCase()}">
+      <span>${segment.label}</span>
+      <strong>${segment.level}</strong>
+      <p>${segment.detail}</p>
+    </article>
+  `).join("");
+}
+
+function segmentLevel(data, keyword) {
+  const relatedSignals = data.signals.filter((signal) =>
+      signal.message.includes(keyword) || signal.evidence.includes(keyword)
+  );
+  const relatedEvidence = data.evidence.filter((item) =>
+      item.label.includes(keyword) || item.headline.includes(keyword)
+  );
+  const levels = [...relatedSignals, ...relatedEvidence].map((item) => item.severity);
+  if (levels.includes("high")) return "High";
+  if (levels.includes("medium")) return "Medium";
+  if (levels.includes("low")) return "Low";
+  return "Info";
+}
+
+function renderScoreBreakdown(signals) {
+  const container = document.querySelector("#score-breakdown");
+  const categories = [
+    {
+      label: "Weather",
+      points: scoreCategory(signals, (signal) => ["weather", "wind"].includes(signal.type))
+    },
+    {
+      label: "Alerts",
+      points: scoreCategory(signals, (signal) => signal.type === "official-alert")
+    },
+    {
+      label: "Airports",
+      points: scoreCategory(signals, (signal) => signal.type === "aviation-weather")
+    }
+  ];
+  const total = categories.reduce((sum, item) => sum + item.points, 0) || 1;
+
+  container.innerHTML = `
+    <div class="breakdown-header">
+      <strong>Risk source breakdown</strong>
+      <span>${total} scored points</span>
+    </div>
+    <div class="breakdown-bars">
+      ${categories.map((item) => `
+        <div class="breakdown-row">
+          <span>${item.label}</span>
+          <div><i style="width: ${Math.max(4, (item.points / total) * 100)}%"></i></div>
+          <strong>${item.points}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function scoreCategory(signals, predicate) {
+  return signals
+      .filter(predicate)
+      .reduce((sum, signal) => sum + (signal.points || 0), 0);
+}
+
+function renderNextSteps(data) {
+  const list = document.querySelector("#next-steps");
+  const level = data.score.level;
+  const steps = level === "High"
+      ? [
+        "Check airline and airport delay boards before committing to departure.",
+        "Confirm alternate departure time or routing with the traveler.",
+        "Recheck alerts and airport weather within 6 hours of travel."
+      ]
+      : level === "Medium"
+      ? [
+        "Build extra buffer into the trip plan.",
+        "Recheck weather and airport status before leaving.",
+        "Keep backup ground transportation available."
+      ]
+      : [
+        "Proceed with the current plan.",
+        "Recheck conditions before departure.",
+        "Keep the assessment link or report for reference."
+      ];
+
+  list.innerHTML = steps.map((step) => `<li>${step}</li>`).join("");
 }
 
 function updateRadarMap(destination) {
