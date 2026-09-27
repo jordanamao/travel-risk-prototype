@@ -65,6 +65,22 @@ OPENAI_MODEL=gpt-6-astra
 
 Restart the server after editing `.env`.
 
+## Netlify Deployment
+
+The production architecture is:
+
+- `public/` is served as a static Netlify site.
+- `/api/analyze` is handled by `netlify/functions/analyze.mjs`.
+- `server.js` still contains the risk engine and local development server, but it only starts the HTTP listener when run directly.
+
+Deploy with:
+
+```bash
+npx netlify deploy --prod
+```
+
+Set `OPENAI_API_KEY` and, optionally, `OPENAI_MODEL` in the Netlify site's environment variables. If the key is not configured, the live demo still works with the local synthesis fallback.
+
 ## Risk Scoring Approach
 
 The prototype scores signals from:

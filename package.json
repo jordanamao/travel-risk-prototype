@@ -4,6 +4,7 @@
   "description": "Travel disruption risk prototype using real external data sources.",
   "main": "server.js",
   "scripts": {
+    "build": "node -e \"console.log('Static site: public/ is the publish directory')\"",
     "start": "node server.js",
     "dev": "node server.js"
   },

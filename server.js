@@ -41,33 +41,43 @@ const MIME_TYPES = {
   ".ico": "image/x-icon"
 };
 
-const server = http.createServer(async (req, res) => {
-  try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
+function createRequestListener() {
+  return async (req, res) => {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
 
-    if (url.pathname === "/api/analyze") {
-      await handleAnalyze(url, res);
-      return;
+      if (url.pathname === "/api/analyze") {
+        await handleAnalyze(url, res);
+        return;
+      }
+
+      serveStatic(url.pathname, res);
+    } catch (error) {
+      sendError(res, error);
     }
+  };
+}
 
-    serveStatic(url.pathname, res);
-  } catch (error) {
-    console.error(error);
-    const message = error.message.includes("429")
-      ? "External geocoding service is rate-limiting requests. Try a listed city or wait a moment before retrying."
-      : "Unexpected server error";
-    sendJson(res, 500, {
-      error: message,
-      details: error.message
-    });
-  }
-});
+if (require.main === module) {
+  const server = http.createServer(createRequestListener());
+  server.listen(PORT, () => {
+    console.log(`Travel Risk Prototype running at http://localhost:${PORT}`);
+  });
+}
 
-server.listen(PORT, () => {
-  console.log(`Travel Risk Prototype running at http://localhost:${PORT}`);
-});
+module.exports = {
+  handleAnalyze
+};
 
 async function handleAnalyze(url, res) {
+  try {
+    await runAnalyze(url, res);
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+async function runAnalyze(url, res) {
   const origin = clean(url.searchParams.get("origin"));
   const destination = clean(url.searchParams.get("destination"));
   const date = clean(url.searchParams.get("date"));
@@ -707,6 +717,17 @@ function requestText(method, urlString, body, headers) {
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload, null, 2));
+}
+
+function sendError(res, error) {
+  console.error(error);
+  const message = error.message.includes("429")
+    ? "External geocoding service is rate-limiting requests. Try a listed city or wait a moment before retrying."
+    : "Unexpected server error";
+  sendJson(res, 500, {
+    error: message,
+    details: error.message
+  });
 }
 
 function clean(value) {
