@@ -4,6 +4,8 @@ const emptyState = document.querySelector("#empty-state");
 const loading = document.querySelector("#loading");
 const results = document.querySelector("#results");
 const errorBox = document.querySelector("#error");
+const savedTripsList = document.querySelector("#saved-trips-list");
+const savedTripsStatus = document.querySelector("#saved-trips-status");
 let latestAssessment = null;
 const locationOptions = [
   "New York, NY",
@@ -90,6 +92,7 @@ setupLocationComboboxes();
 setupRouteSwap();
 setupAirportPreferences();
 setupResultActions();
+setupSavedTrips();
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -254,6 +257,8 @@ function populateAirportSelect(kind, locationValue) {
 }
 
 function setupResultActions() {
+  document.querySelector("#save-trip").addEventListener("click", saveCurrentTrip);
+
   document.querySelector("#copy-summary").addEventListener("click", async () => {
     if (!latestAssessment) return;
     const text = buildReportText(latestAssessment);
@@ -279,6 +284,139 @@ function setupResultActions() {
   });
 
   document.querySelector("#compare-dates").addEventListener("click", compareDates);
+}
+
+function setupSavedTrips() {
+  document.querySelector("#refresh-saved-trips").addEventListener("click", loadSavedTrips);
+  loadSavedTrips();
+}
+
+async function loadSavedTrips() {
+  setSavedTripsStatus("Loading saved trips...");
+  savedTripsList.innerHTML = "";
+
+  try {
+    const response = await fetch("/api/trips");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to load saved trips");
+    renderSavedTrips(data.trips || []);
+    setSavedTripsStatus(data.trips && data.trips.length
+        ? `${data.trips.length} upcoming trip${data.trips.length === 1 ? "" : "s"} saved in PostgreSQL.`
+        : "No saved upcoming trips yet.");
+  } catch (error) {
+    savedTripsList.innerHTML = "";
+    setSavedTripsStatus(savedTripErrorText(error));
+  }
+}
+
+async function saveCurrentTrip() {
+  if (!latestAssessment) return;
+
+  const button = document.querySelector("#save-trip");
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = "Saving...";
+
+  try {
+    const response = await fetch("/api/trips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label: `${latestAssessment.input.origin} to ${latestAssessment.input.destination}`,
+        input: latestAssessment.input,
+        assessment: latestAssessment
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to save trip");
+    button.textContent = "Saved";
+    await loadSavedTrips();
+  } catch (error) {
+    button.textContent = "Save failed";
+    setSavedTripsStatus(savedTripErrorText(error));
+  } finally {
+    setTimeout(() => {
+      button.disabled = false;
+      button.textContent = original;
+    }, 1400);
+  }
+}
+
+function renderSavedTrips(trips) {
+  savedTripsList.innerHTML = "";
+
+  if (!trips.length) {
+    const empty = document.createElement("p");
+    empty.className = "saved-trips-empty";
+    empty.textContent = "Assess a route, then save it here for follow-up.";
+    savedTripsList.appendChild(empty);
+    return;
+  }
+
+  for (const trip of trips) {
+    const item = document.createElement("article");
+    item.className = "saved-trip";
+    item.innerHTML = `
+      <div>
+        <strong></strong>
+        <span></span>
+        <p></p>
+      </div>
+      <div class="saved-trip-actions">
+        <button type="button" data-load-trip>Load</button>
+        <button type="button" data-delete-trip>Delete</button>
+      </div>
+    `;
+    item.querySelector("strong").textContent = trip.label;
+    item.querySelector("span").textContent = `${trip.date} · ${tripTypeLabel(trip.mode)}`;
+    item.querySelector("p").textContent = trip.lastAssessment && trip.lastAssessment.score
+        ? `${trip.lastAssessment.score.level} risk · ${decisionForLevel(trip.lastAssessment.score.level)}`
+        : "Saved route";
+    item.querySelector("[data-load-trip]").addEventListener("click", () => loadTripIntoForm(trip));
+    item.querySelector("[data-delete-trip]").addEventListener("click", () => deleteSavedTrip(trip.id));
+    savedTripsList.appendChild(item);
+  }
+}
+
+function loadTripIntoForm(trip) {
+  form.elements.origin.value = trip.origin;
+  form.elements.destination.value = trip.destination;
+  form.elements.date.value = trip.date;
+  form.elements.mode.value = trip.mode;
+  form.elements.origin.dispatchEvent(new Event("change", { bubbles: true }));
+  form.elements.destination.dispatchEvent(new Event("change", { bubbles: true }));
+  form.elements.mode.dispatchEvent(new Event("change", { bubbles: true }));
+  form.elements.originAirport.value = trip.originAirport || "";
+  form.elements.destinationAirport.value = trip.destinationAirport || "";
+
+  if (trip.lastAssessment) {
+    latestAssessment = trip.lastAssessment;
+    renderResults(trip.lastAssessment);
+    setState("results");
+  }
+}
+
+async function deleteSavedTrip(id) {
+  setSavedTripsStatus("Deleting saved trip...");
+  try {
+    const response = await fetch(`/api/trips/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to delete saved trip");
+    await loadSavedTrips();
+  } catch (error) {
+    setSavedTripsStatus(savedTripErrorText(error));
+  }
+}
+
+function setSavedTripsStatus(message) {
+  savedTripsStatus.textContent = message;
+}
+
+function savedTripErrorText(error) {
+  if (error.message && error.message.includes("DATABASE_URL")) {
+    return "Set DATABASE_URL to enable PostgreSQL saved trips.";
+  }
+  return error.message || "Saved trips are unavailable.";
 }
 
 function flashButton(selector, label) {

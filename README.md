@@ -65,6 +65,15 @@ OPENAI_MODEL=gpt-6-astra
 
 Restart the server after editing `.env`.
 
+Optional saved trips setup:
+
+```text
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+DEFAULT_USER_EMAIL=demo@travel-risk.local
+```
+
+When `DATABASE_URL` is configured, the app creates a `saved_trips` PostgreSQL table automatically and lets users save, reload, and delete upcoming trips.
+
 ## Netlify Deployment
 
 The production architecture is:
@@ -80,6 +89,8 @@ npx netlify deploy --prod
 ```
 
 Set `OPENAI_API_KEY` and, optionally, `OPENAI_MODEL` in the Netlify site's environment variables. If the key is not configured, the live demo still works with the local synthesis fallback.
+
+For saved trips, set `DATABASE_URL` to a PostgreSQL connection string in the deployment environment. On Render, create or attach a Postgres database, copy its internal database URL into the web service environment variables, and redeploy.
 
 ## Risk Scoring Approach
 

@@ -122,6 +122,12 @@ h1 {
 }
 
 /* Forms & Inputs */
+.trip-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
 .route-swap {
     align-self: flex-end;
     display: inline-flex;
@@ -154,12 +160,6 @@ a:focus-visible,
 summary:focus-visible {
     outline: 3px solid rgba(37, 99, 235, 0.45);
     outline-offset: 2px;
-}
-
-.trip-form {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
 }
 
 .form-row {
@@ -290,6 +290,109 @@ summary:focus-visible {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.72);
+}
+
+.saved-trips-panel {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.saved-trips-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.saved-trips-header h2 {
+    margin: 0;
+    color: var(--text-main);
+    font-size: 1rem;
+    line-height: 1.2;
+}
+
+.saved-trips-header .eyebrow {
+    margin-bottom: 3px;
+}
+
+#refresh-saved-trips {
+    flex: 0 0 auto;
+    padding: 7px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.78);
+    color: var(--text-main);
+    font-size: 0.74rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+#refresh-saved-trips:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-subtle);
+}
+
+.saved-trips-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.saved-trips-empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.saved-trip {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: var(--shadow-sm);
+}
+
+.saved-trip strong {
+    display: block;
+    color: var(--text-main);
+    font-size: 0.88rem;
+    line-height: 1.25;
+}
+
+.saved-trip span,
+.saved-trip p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.saved-trip-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.saved-trip-actions button {
+    flex: 1;
+    min-height: 32px;
+    padding: 7px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.75rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.saved-trip-actions button:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-subtle);
 }
 
 button[type="submit"] {

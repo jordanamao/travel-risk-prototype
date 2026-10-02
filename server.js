@@ -2,13 +2,23 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const { randomBytes } = require("crypto");
 const { URL } = require("url");
+
+let PgPool = null;
+try {
+  PgPool = require("pg").Pool;
+} catch {
+  PgPool = null;
+}
 
 loadEnv();
 
 const PORT = Number(process.env.PORT || 5177);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const USER_AGENT = "travel-risk-prototype/1.0 (candidate assessment prototype)";
+let dbPool = null;
+let dbReady = false;
 const KNOWN_LOCATIONS = {
   "new york, ny": { label: "New York, NY, United States", lat: 40.7128, lon: -74.0060 },
   "san francisco, ca": { label: "San Francisco, CA, United States", lat: 37.7749, lon: -122.4194 },
@@ -51,6 +61,11 @@ function createRequestListener() {
         return;
       }
 
+      if (url.pathname === "/api/trips" || url.pathname.startsWith("/api/trips/")) {
+        await handleTrips(req, res, url);
+        return;
+      }
+
       serveStatic(url.pathname, res);
     } catch (error) {
       sendError(res, error);
@@ -66,7 +81,8 @@ if (require.main === module) {
 }
 
 module.exports = {
-  handleAnalyze
+  handleAnalyze,
+  handleTrips
 };
 
 async function handleAnalyze(url, res) {
@@ -75,6 +91,228 @@ async function handleAnalyze(url, res) {
   } catch (error) {
     sendError(res, error);
   }
+}
+
+async function handleTrips(req, res, url) {
+  try {
+    await ensureTripsTable();
+
+    if (req.method === "GET" && url.pathname === "/api/trips") {
+      const userEmail = currentUserEmail(req, url);
+      const trips = await listSavedTrips(userEmail);
+      sendJson(res, 200, { trips });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/trips") {
+      const userEmail = currentUserEmail(req, url);
+      const body = await readJsonBody(req);
+      const savedTrip = await saveTrip(userEmail, body);
+      sendJson(res, 201, { trip: savedTrip });
+      return;
+    }
+
+    if (req.method === "DELETE" && url.pathname.startsWith("/api/trips/")) {
+      const userEmail = currentUserEmail(req, url);
+      const id = decodeURIComponent(url.pathname.replace("/api/trips/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Trip id is required" });
+        return;
+      }
+      const deleted = await deleteSavedTrip(userEmail, id);
+      sendJson(res, deleted ? 200 : 404, deleted ? { ok: true } : { error: "Saved trip not found" });
+      return;
+    }
+
+    sendJson(res, 405, { error: "Method not allowed" });
+  } catch (error) {
+    sendTripError(res, error);
+  }
+}
+
+async function ensureTripsTable() {
+  const pool = getDbPool();
+  if (dbReady) return;
+  await pool.query(`
+    create table if not exists saved_trips (
+      id text primary key,
+      user_email text not null,
+      label text not null,
+      origin text not null,
+      destination text not null,
+      travel_date date not null,
+      mode text not null,
+      origin_airport text,
+      destination_airport text,
+      last_assessment jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`
+    create index if not exists saved_trips_user_date_idx
+      on saved_trips (user_email, travel_date, created_at desc)
+  `);
+  dbReady = true;
+}
+
+function getDbPool() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required to use saved trips.");
+  }
+  if (!PgPool) {
+    throw new Error("The pg package is required. Run npm install before using saved trips.");
+  }
+  if (!dbPool) {
+    dbPool = new PgPool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false }
+    });
+  }
+  return dbPool;
+}
+
+async function listSavedTrips(userEmail) {
+  const result = await getDbPool().query(
+    `
+      select id, user_email, label, origin, destination, travel_date, mode,
+             origin_airport, destination_airport, last_assessment, created_at, updated_at
+      from saved_trips
+      where user_email = $1
+        and travel_date >= current_date
+      order by travel_date asc, created_at desc
+    `,
+    [userEmail]
+  );
+  return result.rows.map(formatSavedTrip);
+}
+
+async function saveTrip(userEmail, body) {
+  const trip = normalizeTripPayload(body);
+  const result = await getDbPool().query(
+    `
+      insert into saved_trips (
+        id, user_email, label, origin, destination, travel_date, mode,
+        origin_airport, destination_airport, last_assessment
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+      returning id, user_email, label, origin, destination, travel_date, mode,
+                origin_airport, destination_airport, last_assessment, created_at, updated_at
+    `,
+    [
+      createTripId(),
+      userEmail,
+      trip.label,
+      trip.origin,
+      trip.destination,
+      trip.date,
+      trip.mode,
+      trip.originAirport || null,
+      trip.destinationAirport || null,
+      JSON.stringify(trip.assessment || null)
+    ]
+  );
+  return formatSavedTrip(result.rows[0]);
+}
+
+async function deleteSavedTrip(userEmail, id) {
+  const result = await getDbPool().query(
+    "delete from saved_trips where user_email = $1 and id = $2",
+    [userEmail, id]
+  );
+  return result.rowCount > 0;
+}
+
+function normalizeTripPayload(body) {
+  const source = body && body.input ? body.input : body || {};
+  const origin = clean(source.origin);
+  const destination = clean(source.destination);
+  const date = clean(source.date);
+  const mode = clean(source.mode) || "flight";
+  const originAirport = cleanAirport(source.originAirport);
+  const destinationAirport = cleanAirport(source.destinationAirport);
+  const label = clean(body && body.label) || `${origin} to ${destination}`;
+
+  if (!origin || !destination || !date) {
+    throw new Error("origin, destination, and date are required to save a trip.");
+  }
+  const dateValidation = validateTravelDate(date);
+  if (!dateValidation.valid) {
+    throw new Error(dateValidation.message);
+  }
+  if (!["flight", "drive", "general"].includes(mode)) {
+    throw new Error("Trip mode must be flight, drive, or general.");
+  }
+
+  return {
+    label,
+    origin,
+    destination,
+    date,
+    mode,
+    originAirport,
+    destinationAirport,
+    assessment: body && body.assessment ? body.assessment : null
+  };
+}
+
+function formatSavedTrip(row) {
+  return {
+    id: row.id,
+    userEmail: row.user_email,
+    label: row.label,
+    origin: row.origin,
+    destination: row.destination,
+    date: formatDbDate(row.travel_date),
+    mode: row.mode,
+    originAirport: row.origin_airport || "",
+    destinationAirport: row.destination_airport || "",
+    lastAssessment: row.last_assessment || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function createTripId() {
+  return randomBytes(16).toString("hex");
+}
+
+function formatDbDate(value) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function currentUserEmail(req, url) {
+  const headerEmail =
+    clean(req.headers["x-user-email"]) ||
+    clean(req.headers["x-forwarded-email"]) ||
+    clean(req.headers["x-auth-request-email"]);
+  return headerEmail || clean(url.searchParams.get("userEmail")) || process.env.DEFAULT_USER_EMAIL || "demo@travel-risk.local";
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => {
+      chunks.push(chunk);
+      if (Buffer.concat(chunks).length > 1_000_000) {
+        req.destroy(new Error("Request body is too large."));
+      }
+    });
+    req.on("end", () => {
+      const text = Buffer.concat(chunks).toString("utf8");
+      if (!text) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(text));
+      } catch {
+        reject(new Error("Request body must be valid JSON."));
+      }
+    });
+    req.on("error", reject);
+  });
 }
 
 async function runAnalyze(url, res) {
@@ -726,6 +964,15 @@ function sendError(res, error) {
     : "Unexpected server error";
   sendJson(res, 500, {
     error: message,
+    details: error.message
+  });
+}
+
+function sendTripError(res, error) {
+  console.error(error);
+  const status = /required|valid|mode|too large/i.test(error.message) ? 400 : 500;
+  sendJson(res, status, {
+    error: status === 500 ? "Saved trips database error" : error.message,
     details: error.message
   });
 }

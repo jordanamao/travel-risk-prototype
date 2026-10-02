@@ -82,6 +82,18 @@
 
         <button type="submit">Assess trip risk</button>
       </form>
+
+      <section class="saved-trips-panel" aria-labelledby="saved-trips-heading">
+        <div class="saved-trips-header">
+          <div>
+            <p class="eyebrow">SQL database</p>
+            <h2 id="saved-trips-heading">Saved trips</h2>
+          </div>
+          <button type="button" id="refresh-saved-trips">Refresh</button>
+        </div>
+        <p id="saved-trips-status" class="field-note">Saved trips are stored in PostgreSQL when DATABASE_URL is configured.</p>
+        <div id="saved-trips-list" class="saved-trips-list"></div>
+      </section>
     </div>
   </section>
 
@@ -131,6 +143,7 @@
         <div class="operations-toolbar">
           <p id="freshness-note"></p>
           <div class="toolbar-actions">
+            <button type="button" id="save-trip">Save trip</button>
             <button type="button" id="copy-summary">Copy summary</button>
             <button type="button" id="download-report">Download report</button>
           </div>
