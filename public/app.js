@@ -87,6 +87,7 @@ if (dateHelp) {
 }
 
 setupLocationComboboxes();
+setupRouteSwap();
 setupAirportPreferences();
 setupResultActions();
 
@@ -186,6 +187,27 @@ function setupLocationComboboxes() {
       if (!wrapper.contains(event.target)) closeMenu();
     });
   }
+}
+
+function setupRouteSwap() {
+  const swapButton = document.querySelector("#swap-route");
+  const originInput = form.querySelector('input[name="origin"]');
+  const destinationInput = form.querySelector('input[name="destination"]');
+  const originAirport = form.querySelector('select[name="originAirport"]');
+  const destinationAirport = form.querySelector('select[name="destinationAirport"]');
+
+  swapButton.addEventListener("click", () => {
+    const origin = originInput.value;
+    const originAirportCode = originAirport.value;
+
+    originInput.value = destinationInput.value;
+    destinationInput.value = origin;
+    originInput.dispatchEvent(new Event("change", { bubbles: true }));
+    destinationInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    originAirport.value = destinationAirport.value;
+    destinationAirport.value = originAirportCode;
+  });
 }
 
 function setupAirportPreferences() {

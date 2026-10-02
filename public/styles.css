@@ -122,6 +122,40 @@ h1 {
 }
 
 /* Forms & Inputs */
+.route-swap {
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: -12px;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+.route-swap span {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.route-swap:hover {
+    background: var(--risk-info-bg);
+}
+
+.route-swap:focus-visible,
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.45);
+    outline-offset: 2px;
+}
+
 .trip-form {
     display: flex;
     flex-direction: column;
@@ -1060,6 +1094,19 @@ button[type="submit"]:hover {
 }
 
 @media (max-width: 720px) {
+    body {
+        padding: 18px 12px;
+    }
+
+    .panel {
+        padding: 20px;
+    }
+
+    .input-panel {
+        position: relative;
+        top: auto;
+    }
+
     .risk-header,
     .operations-toolbar,
     .scenario-row {
@@ -1077,5 +1124,29 @@ button[type="submit"]:hover {
     .impact-split,
     .glossary-grid {
         grid-template-columns: 1fr;
+    }
+
+    .operations-toolbar {
+        gap: 12px;
+    }
+
+    .toolbar-actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .toolbar-actions button {
+        flex: 1 1 auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
     }
 }
